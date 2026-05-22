@@ -1,0 +1,12 @@
+import pandas as pd 
+import matplotlib.pyplot as plt
+#df=pd.read_csv ("C:\Users\tejab\Downloads\Walmart_Store_sales.csv", enconding="utf-8-sig")
+df = pd.read_csv("C:/Users/tejab/Downloads/Walmart_store_sales.csv", encoding="utf-8-sig")
+print(df.head())
+df.isnull().sum()
+df['Weekly_Sales'] = pd.to_numeric(df['Weekly_Sales'])
+print(df.groupby('Store')['Weekly_Sales'].sum())
+Holiday_sales=df.groupby('Holiday_Flag')['Weekly_Sales'].mean()
+print(Holiday_sales)
+Holiday_sales.plot(kind='bar')
+plt.show()
