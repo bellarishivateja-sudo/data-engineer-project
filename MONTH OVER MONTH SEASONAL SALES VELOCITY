@@ -1,0 +1,141 @@
+import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import requests
+import io
+
+# ==========================================
+# 1. EXTRACT STAGE
+# ==========================================
+def extract_raw_data(cloud_url):
+    """Fetches the raw, untouched data stream from cloud storage."""
+    print(">>> [E]xtract: Connecting to Supabase Cloud Storage...")
+    try:
+        response = requests.get(cloud_url)
+        response.raise_for_status()
+        print(">>> [E]xtract: Raw data successfully streamed from cloud.")
+        return response.content
+    except Exception as e:
+        print(f">>> [E]xtract Failed: {e}")
+        return None
+
+# ==========================================
+# 2. LOAD STAGE
+# ==========================================
+def load_raw_data(raw_bytes):
+    """Loads the raw data directly into our data environment (DataFrame)."""
+    print(">>> [L]oad: Loading raw data into memory workspace...")
+    if raw_bytes is None:
+        print(">>> [L]oad: Falling back to local file copy...")
+        df_raw = pd.read_csv("C:/Users/tejab/Downloads/Walmart_store_sales.csv", encoding="utf-8-sig")
+    else:
+        df_raw = pd.read_csv(io.BytesIO(raw_bytes), encoding="utf-8-sig")
+    
+    print(f">>> [L]oad: Complete. Loaded {len(df_raw)} raw rows.")
+    return df_raw
+
+# ==========================================
+# 3. TRANSFORM & VISUALIZE STAGE
+# ==========================================
+def transform_and_analyze(df):
+    """Transforms raw cloud data to extract multiple advanced economic insights."""
+    print(">>> [T]ransform: Cleaning types and calculating metrics...")
+    
+    # ----------------------------------------------------
+    # DATA CLEANING & TYPE CONVERSIONS
+    # ----------------------------------------------------
+    df['Weekly_Sales'] = pd.to_numeric(df['Weekly_Sales'], errors='coerce')
+    df['Unemployment'] = pd.to_numeric(df['Unemployment'], errors='coerce')
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+    df['Month'] = df['Date'].dt.month
+
+    # ----------------------------------------------------
+    # METRIC 1: HOLIDAY PERFORMANCE
+    # ----------------------------------------------------
+    holiday_summary = df.groupby('Holiday_Flag')['Weekly_Sales'].mean().reset_index()
+    holiday_summary['Holiday_Flag'] = holiday_summary['Holiday_Flag'].map({1: 'Holiday Weeks', 0: 'Regular Weeks'})
+    
+    # ----------------------------------------------------
+    # METRIC 2: SEASONAL MONTHLY TRENDS
+    # ----------------------------------------------------
+    monthly_summary = df.groupby('Month')['Weekly_Sales'].mean().reset_index()
+    month_map = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 
+                 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
+    monthly_summary['Month_Name'] = monthly_summary['Month'].map(month_map)
+    
+    # ----------------------------------------------------
+    # METRIC 3: ECONOMIC IMPACT (UNEMPLOYMENT BINNING)
+    # ----------------------------------------------------
+    print("\n>>> [T]ransform: Segmenting regional unemployment brackets...")
+    # Group regional unemployment rates into Low, Medium, and High categories
+    df['Unemployment_Bracket'] = pd.cut(df['Unemployment'], 
+                                        bins=[0, 6.0, 8.5, 15.0], 
+                                        labels=['Low (<6.0%)', 'Moderate (6.0-8.5%)', 'High (>8.5%)'])
+    
+    economic_summary = df.groupby('Unemployment_Bracket', observed=False)['Weekly_Sales'].mean().reset_index()
+    print("--- Processed Macroeconomic Impact Matrix ---")
+    print(economic_summary.to_string(index=False))
+
+    # ----------------------------------------------------
+    # PLOT 1: HOLIDAY BAR CHART
+    # ----------------------------------------------------
+    plt.figure(figsize=(8, 5))
+    sns.set_theme(style="whitegrid")
+    ax1 = sns.barplot(x='Holiday_Flag', y='Weekly_Sales', data=holiday_summary, palette=['#1A365D', '#E53E3E'])
+    plt.title('Walmart E-Commerce: Holiday vs. Regular Week Sales', fontsize=12, fontweight='bold', pad=15)
+    ax1.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: f"{int(x):,}"))
+    plt.tight_layout()
+    plt.savefig('Walmart_Holiday_Performance.png', dpi=300)
+    plt.show()
+
+    # ----------------------------------------------------
+    # PLOT 2: SEASONAL LINE CHART
+    # ----------------------------------------------------
+    plt.figure(figsize=(10, 5))
+    ax2 = sns.lineplot(x='Month_Name', y='Weekly_Sales', data=monthly_summary, marker='o', linewidth=2.5, color='#1A365D')
+    plt.title('Walmart E-Commerce: Month-Over-Month Seasonal Sales Velocity', fontsize=12, fontweight='bold', pad=15)
+    ax2.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: f"{int(x):,}"))
+    plt.tight_layout()
+    plt.savefig('Walmart_Seasonal_Trends.png', dpi=300)
+    plt.show()
+
+    # ----------------------------------------------------
+    # PLOT 3: NEW ADVANCED ECONOMIC IMPACT ANALYSIS
+    # ----------------------------------------------------
+    print(">>> Building Visual Chart 3: Economic Macro-Analysis...")
+    plt.figure(figsize=(9, 5))
+    sns.set_theme(style="whitegrid")
+    
+    # Render a comparative horizontal bar chart for the economic metrics
+    ax3 = sns.barplot(x='Weekly_Sales', y='Unemployment_Bracket', data=economic_summary, palette='viridis')
+    
+    plt.title('Walmart E-Commerce: Revenue Performance vs Regional Unemployment Brackets', fontsize=12, fontweight='bold', pad=15)
+    plt.xlabel('Average Weekly Revenue Volume ($)', fontsize=11, labelpad=10)
+    plt.ylabel('Regional Unemployment Level', fontsize=11, labelpad=10)
+    
+    # Format the X-axis for readable numbers
+    ax3.get_xaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: f"${int(x):,}"))
+    
+    # Annotate exact data numbers on the bars
+    for p in ax3.patches:
+        width = p.get_width()
+        ax3.annotate(f"${width:,.2f}", 
+                    (width, p.get_y() + p.get_height() / 2.),
+                    ha='left', va='center', xytext=(10, 0), textcoords='offset points', fontweight='bold', color='#2D3748')
+                 
+    plt.tight_layout()
+    plt.savefig('Walmart_Economic_Impact_Analysis.png', dpi=300)
+    print(">>> Success: Economic impact chart saved as 'Walmart_Economic_Impact_Analysis.png'")
+    plt.show()
+
+# ==========================================
+# PIPELINE ORCHESTRATION
+# ==========================================
+if __name__ == "__main__":
+    supabase_cloud_url = "https://ddigyigwdmnqzwazshne.supabase.co/storage/v1/object/public/walmart%20data/Walmart_Store_sales.csv"
+    
+    raw_data_stream = extract_raw_data(supabase_cloud_url)
+    loaded_dataframe = load_raw_data(raw_data_stream)
+    transform_and_analyze(loaded_dataframe)
+    
+    print("\n>>> End-to-End Multi-Dimensional Cloud ELT Pipeline Completed Successfully!")
