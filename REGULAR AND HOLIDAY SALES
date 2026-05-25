@@ -1,0 +1,104 @@
+import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import requests
+import io
+
+# ==========================================
+# 1. EXTRACT STAGE
+# ==========================================
+def extract_raw_data(cloud_url):
+    """Fetches the raw, untouched data stream from cloud storage."""
+    print(">>> [E]xtract: Connecting to Supabase Cloud Storage...")
+    try:
+        response = requests.get(cloud_url)
+        response.raise_for_status()
+        print(">>> [E]xtract: Raw data successfully streamed from cloud.")
+        return response.content
+    except Exception as e:
+        print(f">>> [E]xtract Failed: {e}")
+        return None
+
+# ==========================================
+# 2. LOAD STAGE
+# ==========================================
+def load_raw_data(raw_bytes):
+    """Loads the raw data directly into our data environment (DataFrame)."""
+    print(">>> [L]oad: Loading raw data into memory workspace...")
+    if raw_bytes is None:
+        print(">>> [L]oad: Falling back to local file copy...")
+        # Fallback to local file if cloud network fails
+        df_raw = pd.read_csv("C:/Users/tejab/Downloads/Walmart_store_sales.csv", encoding="utf-8-sig")
+    else:
+        df_raw = pd.read_csv(io.BytesIO(raw_bytes), encoding="utf-8-sig")
+    
+    print(f">>> [L]oad: Complete. Loaded {len(df_raw)} raw rows.")
+    return df_raw
+
+# ==========================================
+# 3. TRANSFORM & VISUALIZE STAGE
+# ==========================================
+def transform_and_analyze(df):
+    """Transforms the loaded raw data to extract business insights."""
+    print(">>> [T]ransform: Cleaning types and calculating metrics...")
+    
+    # Check for missing data anomalies in the loaded dataset
+    print(f"Missing Values Check:\n{df.isnull().sum()}\n")
+    
+    # Data Cleaning Transformation
+    df['Weekly_Sales'] = pd.to_numeric(df['Weekly_Sales'], errors='coerce')
+    
+    # Aggregation Transformation 1: Total Sales by Store
+    print("--- Total Sales by Store (Sample) ---")
+    store_sales = df.groupby('Store')['Weekly_Sales'].sum()
+    print(store_sales.map(lambda x: f"${x:,.2f}").head(), "\n")
+    
+    # Aggregation Transformation 2: Holiday vs Regular Weeks
+    holiday_summary = df.groupby('Holiday_Flag')['Weekly_Sales'].mean().reset_index()
+    
+    # Mapping Transformation: Make the labels presentation-ready
+    holiday_summary['Holiday_Flag'] = holiday_summary['Holiday_Flag'].map({1: 'Holiday Weeks', 0: 'Regular Weeks'})
+    print("--- Processed Holiday Performance Matrix ---")
+    print(holiday_summary.to_string(index=False))
+    
+    # Graphical Visual Load
+    print("\n>>> Building Visual Chart...")
+    plt.figure(figsize=(8, 6))
+    sns.set_theme(style="whitegrid")
+    
+    ax = sns.barplot(x='Holiday_Flag', y='Weekly_Sales', data=holiday_summary, palette=['#1A365D', '#E53E3E'])
+    
+    plt.title('Walmart E-Commerce: Holiday vs. Regular Week Sales', fontsize=12, fontweight='bold', pad=15)
+    plt.xlabel('Accounting Week Type', fontsize=11, labelpad=10)
+    plt.ylabel('Average Weekly Sales Volume ($)', fontsize=11, labelpad=10)
+    
+    # Format the y-axis values cleanly
+    ax.get_yaxis().set_major_formatter(plt.FuncFormatter(lambda x, p: f"{int(x):,}"))
+    
+    # Annotate exact calculations over the bars
+    for p in ax.patches:
+        ax.annotate(f"${p.get_height():,.2f}", 
+                    (p.get_x() + p.get_width() / 2., p.get_height()), 
+                    ha='center', va='center', xytext=(0, 8), textcoords='offset points', fontweight='bold')
+    
+    plt.tight_layout()
+    plt.savefig('Walmart_ELT_Pipeline_Output.png', dpi=300)
+    print("\n>>> Success: Pipeline graph saved as 'Walmart_ELT_Pipeline_Output.png'")
+    plt.show()
+
+# ==========================================
+# PIPELINE ORCHESTRATION
+# ==========================================
+if __name__ == "__main__":
+    supabase_cloud_url = "https://ddigyigwdmnqzwazshne.supabase.co/storage/v1/object/public/walmart%20data/Walmart_Store_sales.csv"
+    
+    # Run Step 1: Extract
+    raw_data_stream = extract_raw_data(supabase_cloud_url)
+    
+    # Run Step 2: Load
+    loaded_dataframe = load_raw_data(raw_data_stream)
+    
+    # Run Step 3: Transform
+    transform_and_analyze(loaded_dataframe)
+    
+    print("\n>>> End-to-End Cloud ELT Pipeline Completed Successfully!")
